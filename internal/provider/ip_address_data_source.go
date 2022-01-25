@@ -105,10 +105,17 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		RawQuery:   baseURL.RawQuery,
 		Fragment:   baseURL.Fragment,
 	}
+	requestURLstr := requestURL.String()
 
-	log.Printf("got to prepare request ✅: %s", requestURL.String())
+	log.Printf("got to prepare request ✅: %s", requestURLstr)
 
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", requestURL.String(), nil)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", requestURLstr, nil)
+	if err != nil {
+		log.Printf("HTTP Client Creation Error 🚨: %s", err)
+		resp.Diagnostics.AddError("Error preparing the HTTP request", fmt.Sprintf("There was an error when preparing the HTTP client with the url '%s': %s", requestURLstr, err))
+		return
+	}
+
 	userAgent := fmt.Sprintf("%s (%s)", d.provider.toolName, d.provider.version)
 	httpReq.Header.Set("User-Agent", userAgent)
 
@@ -117,7 +124,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		log.Printf("HTTP Client Error 🚨: %s", err)
-		resp.Diagnostics.AddError("Error fetching information from the IP information provider", fmt.Sprintf("There was an error when contacting '%s': %s", requestURL.String(), err))
+		resp.Diagnostics.AddError("Error fetching information from the IP information provider", fmt.Sprintf("There was an error when contacting '%s': %s", requestURLstr, err))
 		return
 	}
 	defer httpResp.Body.Close()
@@ -133,19 +140,14 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	log.Printf("got to reading ✅")
 
 	reader := httpResp.Body
-	
-	// respBytes, err := io.ReadAll(httpResp.Body)
-	// if err != nil {
-	// 	log.Printf("HTTP Response Read Error 🚨: %s", err)
-	// 	resp.Diagnostics.AddError("Error reading the response from the IP information provider", fmt.Sprintf("The IP information provider response could not be read completly: %s", err))
-	// 	return
-	// }
-	// reader := bytes.NewReader(respBytes)
-	//
-	// log.Printf("got to parsing ✅: %s", string(respBytes))
 
 	respData := new(IPResponse)
 	err = json.NewDecoder(reader).Decode(respData)
+	if err != nil {
+		log.Printf("JSON decode error 🚨: %s", err)
+		resp.Diagnostics.AddError("Error parsing the response from the IP information provider", fmt.Sprintf("There was an error when parsing the response from the IP information provider: %s", err))
+		return
+	}
 
 	log.Printf("got to apply ✅: %+v", respData)
 

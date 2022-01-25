@@ -13,9 +13,21 @@ func TestAccExampleDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: defaultConfig,
+				Config: v4Config,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.publicip_address.default", "ip_version", "v4"),
+				),
+			},
+			{
+				Config: v6Config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.publicip_address.default", "ip_version", "v6"),
+				),
+			},
+			{
+				Config: defaultConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("data.publicip_address.default", "ip_version"),
 				),
 			},
 		},
