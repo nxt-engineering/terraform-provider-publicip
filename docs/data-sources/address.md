@@ -16,14 +16,6 @@ The current (public) IP as reported by the IP information provider.
 data "publicip_address" "default" {
 }
 
-data "publicip_address" "v6" {
-  ip_version = "v6"
-}
-
-data "publicip_address" "v4" {
-  ip_version = "v4"
-}
-
 data "publicip_address" "source_v6" {
   source_ip = "::"
 }
@@ -38,8 +30,10 @@ data "publicip_address" "source_v4" {
 
 ### Optional
 
-- **ip_version** (String) Whether to use IPv4 or IPv6 only. Valid values: 'v6', 'v4'
-- **source_ip** (String) Set the source IP address to use to make the request to the IP information provider. The address must be configured on a local network interface. Leave empty or null for default interface.
+- **source_ip** (String) Set the source IP address that is used to make the request to the IP information provider.
+The address must be configured on a local network interface and that interface will be used.
+Leave empty or `null` for default interface and IP stack.
+Set to `::` to get your public IPv6 address and `0.0.0.0` to get your IPv4 address.
 
 ### Read-Only
 
@@ -47,5 +41,8 @@ data "publicip_address" "source_v4" {
 - **asn_org** (String) The organisation to which the ASN is registered to as returned by the IP information provider.
 - **id** (String) An ID, which is only used internally. *Do not use this field in your terraform definitions.*
 - **ip** (String) The IP as returned by the IP information provider.
+- **ip_version** (String) Whether the returned IP is an IPv6 or IPv4. Expected values: 'v6', 'v4', 'unknown'
+- **is_ipv4** (Boolean) `true` if the returned IP is an IPv6.
+- **is_ipv6** (Boolean) `true` if the returned IP is an IPv4.
 
 

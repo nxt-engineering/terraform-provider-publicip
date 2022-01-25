@@ -15,6 +15,10 @@ import (
 	"inet.af/netaddr"
 )
 
+const IPVersion4 = "v4"
+const IPVersion6 = "v6"
+const IPUnknown = "unknown"
+
 type ipDataSourceType struct{}
 
 func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
@@ -29,10 +33,19 @@ func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagn
 				Type:                types.StringType,
 			},
 			"ip_version": {
-				MarkdownDescription: fmt.Sprintf("Whether to use IPv4 or IPv6 only. Valid values: '%s', '%s'", IPVersion6, IPVersion4),
-				Optional:            true,
+				MarkdownDescription: fmt.Sprintf("Whether the returned IP is an IPv6 or IPv4. Expected values: '%s', '%s', '%s'", IPVersion6, IPVersion4, IPUnknown),
+				Computed:            true,
 				Type:                types.StringType,
-				Validators:          []tfsdk.AttributeValidator{ipVersionValidator{}},
+			},
+			"is_ipv4": {
+				MarkdownDescription: "`true` if the returned IP is an IPv6.",
+				Computed:            true,
+				Type:                types.BoolType,
+			},
+			"is_ipv6": {
+				MarkdownDescription: "`true` if the returned IP is an IPv4.",
+				Computed:            true,
+				Type:                types.BoolType,
 			},
 			"ip": {
 				MarkdownDescription: "The IP as returned by the IP information provider.",
@@ -50,9 +63,12 @@ func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagn
 				Type:                types.StringType,
 			},
 			"source_ip": {
-				MarkdownDescription: "Set the source IP address to use to make the request to the IP information provider. The address must be configured on a local network interface. Leave empty or null for default interface.",
-				Optional:            true,
-				Type:                types.StringType,
+				MarkdownDescription: `Set the source IP address that is used to make the request to the IP information provider.
+The address must be configured on a local network interface and that interface will be used.
+Leave empty or ` + "`null`" + ` for default interface and IP stack.
+` + "Set to `::` to get your public IPv6 address and `0.0.0.0` to get your IPv4 address.",
+				Optional: true,
+				Type:     types.StringType,
 			},
 		},
 	}, nil
@@ -69,6 +85,8 @@ func (t ipDataSourceType) NewDataSource(_ context.Context, in tfsdk.Provider) (t
 type ipDataSourceData struct {
 	ID        types.String `tfsdk:"id"`
 	IPVersion types.String `tfsdk:"ip_version"`
+	IsIPv6    types.Bool   `tfsdk:"is_ipv6"`
+	IsIPv4    types.Bool   `tfsdk:"is_ipv4"`
 	IP        types.String `tfsdk:"ip"`
 	ASNID     types.String `tfsdk:"asn_id"`
 	ASNOrg    types.String `tfsdk:"asn_org"`
@@ -114,33 +132,12 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		}
 	}
 
-	if data.IPVersion.Null {
-		data.IPVersion = types.String{Value: ""}
-	}
-
 	network := "tcp"
-	switch data.IPVersion.Value {
-	case IPVersion6:
-		if !sourceIP.Is6() && !sourceIP.IsZero() {
-			log.Printf("The source IP '%s' is not IPv6 🚨", data.SourceIP.Value)
-			resp.Diagnostics.AddError("Invalid source IPv6", fmt.Sprintf("The IP '%s' must be an IPv6 for the ip_version value '%s'.", data.SourceIP.Value, data.IPVersion.Value))
-			return
-		}
-		network = "tcp6"
-	case IPVersion4:
-		if !sourceIP.Is4() && !sourceIP.IsZero() {
-			log.Printf("The source IP '%s' is not IPv4 🚨", data.SourceIP.Value)
-			resp.Diagnostics.AddError("Invalid source IPv4", fmt.Sprintf("The IP '%s' must be an IPv4 for the ip_version value '%s'.", data.SourceIP.Value, data.IPVersion.Value))
-			return
-		}
-		network = "tcp4"
-	default:
-		if data.SourceIP.Value != "" {
-			if sourceIP.Is6() {
-				network = "tcp6"
-			} else if sourceIP.Is4() {
-				network = "tcp4"
-			}
+	if data.SourceIP.Value != "" {
+		if sourceIP.Is6() {
+			network = "tcp6"
+		} else if sourceIP.Is4() {
+			network = "tcp4"
 		}
 	}
 
@@ -213,7 +210,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		return
 	}
 
-	log.Printf("got to apply ✅: %+v", respData)
+	log.Printf("got to parse ip response ✅: %+v", respData)
 
 	ip, err := netaddr.ParseIP(respData.IP)
 	if err != nil {
@@ -222,11 +219,16 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		return
 	}
 
-	data.ID = types.String{Value: fmt.Sprintf("{%s}%s$%s", data.IPVersion.Value, respData.IP, data.SourceIP.Value)}
+	log.Printf("got to apply ✅: %+v", respData)
+
+	data.ID = types.String{Value: fmt.Sprintf("%s$%s", data.SourceIP.Value, respData.IP)}
+	data.IP = types.String{Value: ip.String()}
+	data.IPVersion = types.String{Value: ipVersion(ip)}
+	data.IsIPv6 = types.Bool{Value: ip.Is6()}
+	data.IsIPv4 = types.Bool{Value: ip.Is4()}
 	data.IP = types.String{Value: ip.String()}
 	data.ASNID = types.String{Value: respData.ASN}
 	data.ASNOrg = types.String{Value: respData.ASNOrg}
-	data.IPVersion = types.String{Value: ipVersion(data.IPVersion, ip)}
 
 	log.Printf("got to state update ✅: %+v", data)
 
@@ -236,11 +238,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	log.Printf("done ✅")
 }
 
-func ipVersion(version types.String, netIP netaddr.IP) string {
-	if version.Value != "" {
-		return version.Value
-	}
-
+func ipVersion(netIP netaddr.IP) string {
 	if netIP.Is6() {
 		return IPVersion6
 	}
@@ -248,5 +246,5 @@ func ipVersion(version types.String, netIP netaddr.IP) string {
 		return IPVersion4
 	}
 
-	return "unknown"
+	return IPUnknown
 }

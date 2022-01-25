@@ -24,7 +24,11 @@ provider "publicip" {}
 
 data "publicip_address" "main" {}
 
-output "out" {
+output "ip" {
+  value = data.publicip_address.main.ip
+}
+
+output "all" {
   value = data.publicip_address.main
 }
 ```
@@ -94,14 +98,6 @@ provider "publicip" {}
 
 data "publicip_address" "default" {}
 
-data "publicip_address" "v6" {
-  ip_version = "v6"
-}
-
-data "publicip_address" "v4" {
-  ip_version = "v4"
-}
-
 data "publicip_address" "default_v4" {
   source_ip = "0.0.0.0"
 }
@@ -110,27 +106,11 @@ data "publicip_address" "default_v6" {
   source_ip = "::"
 }
 
-data "publicip_address" "v6_v6" {
-  ip_version = "v6"
-  source_ip = "::"
-}
-
-data "publicip_address" "v4_v4" {
-  ip_version = "v4"
-  source_ip = "0.0.0.0"
-}
-
 output "out" {
   value = {
-    default = data.publicip_address.default,
-    v6      = data.publicip_address.v6,
-    v4      = data.publicip_address.v4,
-
+    default    = data.publicip_address.default,
     default_v4 = data.publicip_address.default_v4,
     default_v6 = data.publicip_address.default_v6,
-
-    v6_v6 = data.publicip_address.v6_v6,
-    v4_v4 = data.publicip_address.v4_v4,
   }
 }
 ```
