@@ -10,7 +10,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -170,16 +169,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 
 	log.Printf("got to apply ✅: %+v", respData)
 
-	if data.ID.Unknown || data.ID.Null {
-		uuidStr, err := uuid.GenerateUUID()
-		if err != nil {
-			log.Printf("Error while generating a new UUID 🚨: %s", err)
-			resp.Diagnostics.AddError("Internal error, try again.", fmt.Sprintf("There was an internal error in the provider when creating a new UUID: %s.", err))
-			return
-		}
-		data.ID = types.String{Value: uuidStr}
-	}
-
+	data.ID = types.String{Value: fmt.Sprintf("{%s}%s", data.IPVersion.Value, respData.IP)}
 	data.IP = types.String{Value: respData.IP}
 	data.ASNID = types.String{Value: respData.ASN}
 	data.ASNOrg = types.String{Value: respData.ASNOrg}
