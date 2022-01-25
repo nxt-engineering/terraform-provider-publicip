@@ -11,23 +11,22 @@ func TestAccExampleDataSource(t *testing.T) {
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Read testing
 			{
-				Config: v4Config,
+				Config: defaultConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.publicip_address.default", "ip_version", "v4"),
+					resource.TestCheckResourceAttrSet("data.publicip_address.default", "ip_version"),
 				),
 			},
 			{
 				Config: v6Config,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.publicip_address.default", "ip_version", "v6"),
+					resource.TestCheckResourceAttr("data.publicip_address.v6", "ip_version", "v6"),
 				),
 			},
 			{
-				Config: defaultConfig,
+				Config: v4Config,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("data.publicip_address.default", "ip_version"),
+					resource.TestCheckResourceAttr("data.publicip_address.v4", "ip_version", "v4"),
 				),
 			},
 		},
@@ -41,12 +40,12 @@ data "publicip_address" "default" {
 
 const v4Config = `
 data "publicip_address" "v4" {
-ip_version = "v4"
+  ip_version = "v4"
 }
 `
 
 const v6Config = `
 data "publicip_address" "v6" {
-ip_version = "v6"
+  ip_version = "v6"
 }
 `

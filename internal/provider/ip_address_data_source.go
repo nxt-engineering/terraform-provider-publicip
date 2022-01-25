@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -17,16 +18,21 @@ import (
 
 type ipDataSourceType struct{}
 
-func (t ipDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
+func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "The current (public) IP as reported by the IP information provider.",
 
 		Attributes: map[string]tfsdk.Attribute{
-			"ip_version": {
+			"id": {
+				MarkdownDescription: "An ID, which is only used internally. *Do not use this field in your terraform definitions.*",
+				Computed:            true,
 				Type:                types.StringType,
+			},
+			"ip_version": {
 				MarkdownDescription: "Whether to use IPv4 or IPv6 only. Valid values: 'V4', 'V6'",
 				Optional:            true,
+				Type:                types.StringType,
 				Validators:          []tfsdk.AttributeValidator{ipVersionValidator{}},
 			},
 			"ip": {
@@ -48,7 +54,7 @@ func (t ipDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Dia
 	}, nil
 }
 
-func (t ipDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider) (tfsdk.DataSource, diag.Diagnostics) {
+func (t ipDataSourceType) NewDataSource(_ context.Context, in tfsdk.Provider) (tfsdk.DataSource, diag.Diagnostics) {
 	provider, diags := convertProviderType(in)
 
 	return ipDataSource{
@@ -57,6 +63,7 @@ func (t ipDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider) 
 }
 
 type ipDataSourceData struct {
+	ID        types.String `tfsdk:"id"`
 	IPVersion types.String `tfsdk:"ip_version"`
 	IP        types.String `tfsdk:"ip"`
 	ASNID     types.String `tfsdk:"asn_id"`
@@ -121,9 +128,21 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 
 	log.Printf("got to send request ✅: %s", userAgent)
 
+	if !d.provider.rateLimiter.Allow() {
+		log.Printf("the rate limit may be triggered ⏳")
+	}
+
+	timeoutCtx, cancelFunc := context.WithTimeout(ctx, d.provider.timeout)
+	defer cancelFunc()
+	err = d.provider.rateLimiter.Wait(timeoutCtx)
+	if err != nil {
+		log.Printf("Rate limiter error 🚨: %s", err)
+		resp.Diagnostics.AddError("Error waiting for rate limit", fmt.Sprintf("There was an error while awaiting a slot from the rate limiter: %s", err))
+	}
+
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		log.Printf("HTTP Client Error 🚨: %s", err)
+		log.Printf("HTTP client error 🚨: %s", err)
 		resp.Diagnostics.AddError("Error fetching information from the IP information provider", fmt.Sprintf("There was an error when contacting '%s': %s", requestURLstr, err))
 		return
 	}
@@ -150,6 +169,16 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	}
 
 	log.Printf("got to apply ✅: %+v", respData)
+
+	if data.ID.Unknown || data.ID.Null {
+		uuidStr, err := uuid.GenerateUUID()
+		if err != nil {
+			log.Printf("Error while generating a new UUID 🚨: %s", err)
+			resp.Diagnostics.AddError("Internal error, try again.", fmt.Sprintf("There was an internal error in the provider when creating a new UUID: %s.", err))
+			return
+		}
+		data.ID = types.String{Value: uuidStr}
+	}
 
 	data.IP = types.String{Value: respData.IP}
 	data.ASNID = types.String{Value: respData.ASN}
