@@ -16,12 +16,20 @@ The current (public) IP as reported by the IP information provider.
 data "publicip_address" "default" {
 }
 
+data "publicip_address" "v6" {
+  ip_version = "v6"
+}
+
 data "publicip_address" "v4" {
   ip_version = "v4"
 }
 
-data "publicip_address" "v6" {
-  ip_version = "v6"
+data "publicip_address" "source_v6" {
+  source_ip = "::"
+}
+
+data "publicip_address" "source_v4" {
+  source_ip = "0.0.0.0"
 }
 ```
 
@@ -31,6 +39,7 @@ data "publicip_address" "v6" {
 ### Optional
 
 - **ip_version** (String) Whether to use IPv4 or IPv6 only. Valid values: 'v6', 'v4'
+- **source_ip** (String) Set the source IP address to use to make the request to the IP information provider. The address must be configured on a local network interface. Leave empty or null for default interface.
 
 ### Read-Only
 

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"inet.af/netaddr"
 )
 
 type ipDataSourceType struct{}
@@ -49,6 +49,11 @@ func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagn
 				Computed:            true,
 				Type:                types.StringType,
 			},
+			"source_ip": {
+				MarkdownDescription: "Set the source IP address to use to make the request to the IP information provider. The address must be configured on a local network interface. Leave empty or null for default interface.",
+				Optional:            true,
+				Type:                types.StringType,
+			},
 		},
 	}, nil
 }
@@ -67,6 +72,7 @@ type ipDataSourceData struct {
 	IP        types.String `tfsdk:"ip"`
 	ASNID     types.String `tfsdk:"asn_id"`
 	ASNOrg    types.String `tfsdk:"asn_org"`
+	SourceIP  types.String `tfsdk:"source_ip"`
 }
 
 type ipDataSource struct {
@@ -91,14 +97,54 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		Timeout: d.provider.timeout,
 	}
 
-	if !data.IPVersion.Null {
-		switch data.IPVersion.Value {
-		case IPVersion6:
-			forceV6(client)
-		case IPVersion4:
-			forceV4(client)
+	if data.SourceIP.Null {
+		data.SourceIP = types.String{Value: ""}
+	}
+
+	sourceIP := netaddr.IP{}
+	if data.SourceIP.Value != "" {
+		sourceIPStr := data.SourceIP.Value
+
+		var err error
+		sourceIP, err = netaddr.ParseIP(sourceIPStr)
+		if err != nil || !sourceIP.IsValid() {
+			log.Printf("Could not parse IP '%s' 🚨: %s", sourceIPStr, err)
+			resp.Diagnostics.AddError("Invalid IP", fmt.Sprintf("The IP '%s' could not be parsed as valid IP: %s", sourceIPStr, err))
+			return
 		}
 	}
+
+	if data.IPVersion.Null {
+		data.IPVersion = types.String{Value: ""}
+	}
+
+	network := "tcp"
+	switch data.IPVersion.Value {
+	case IPVersion6:
+		if !sourceIP.Is6() && !sourceIP.IsZero() {
+			log.Printf("The source IP '%s' is not IPv6 🚨", data.SourceIP.Value)
+			resp.Diagnostics.AddError("Invalid source IPv6", fmt.Sprintf("The IP '%s' must be an IPv6 for the ip_version value '%s'.", data.SourceIP.Value, data.IPVersion.Value))
+			return
+		}
+		network = "tcp6"
+	case IPVersion4:
+		if !sourceIP.Is4() && !sourceIP.IsZero() {
+			log.Printf("The source IP '%s' is not IPv4 🚨", data.SourceIP.Value)
+			resp.Diagnostics.AddError("Invalid source IPv4", fmt.Sprintf("The IP '%s' must be an IPv4 for the ip_version value '%s'.", data.SourceIP.Value, data.IPVersion.Value))
+			return
+		}
+		network = "tcp4"
+	default:
+		if data.SourceIP.Value != "" {
+			if sourceIP.Is6() {
+				network = "tcp6"
+			} else if sourceIP.Is4() {
+				network = "tcp4"
+			}
+		}
+	}
+
+	forceNetwork(client, network, sourceIP)
 
 	baseURL := d.provider.ipURL
 	requestURL := url.URL{
@@ -169,11 +215,18 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 
 	log.Printf("got to apply ✅: %+v", respData)
 
-	data.ID = types.String{Value: fmt.Sprintf("{%s}%s", data.IPVersion.Value, respData.IP)}
-	data.IP = types.String{Value: respData.IP}
+	ip, err := netaddr.ParseIP(respData.IP)
+	if err != nil {
+		log.Printf("IP '%s' decode error 🚨: %s", respData.IP, err)
+		resp.Diagnostics.AddError("Error parsing the IP from the IP information provider", fmt.Sprintf("There was an error when parsing the IP '%s' of the response from the IP information provider: %s", respData.IP, err))
+		return
+	}
+
+	data.ID = types.String{Value: fmt.Sprintf("{%s}%s$%s", data.IPVersion.Value, respData.IP, data.SourceIP.Value)}
+	data.IP = types.String{Value: ip.String()}
 	data.ASNID = types.String{Value: respData.ASN}
 	data.ASNOrg = types.String{Value: respData.ASNOrg}
-	data.IPVersion = types.String{Value: ipVersion(data.IPVersion, respData.IP)}
+	data.IPVersion = types.String{Value: ipVersion(data.IPVersion, ip)}
 
 	log.Printf("got to state update ✅: %+v", data)
 
@@ -183,13 +236,17 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	log.Printf("done ✅")
 }
 
-func ipVersion(version types.String, ip string) string {
-	if !version.Null {
+func ipVersion(version types.String, netIP netaddr.IP) string {
+	if version.Value != "" {
 		return version.Value
 	}
 
-	if strings.Contains(ip, ":") {
+	if netIP.Is6() {
 		return IPVersion6
 	}
-	return IPVersion4
+	if netIP.Is4() {
+		return IPVersion4
+	}
+
+	return "unknown"
 }

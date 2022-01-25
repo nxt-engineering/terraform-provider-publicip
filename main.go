@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 
-	"gitlab.com/nxt/public/terraform-provider-publicip/internal/provider"
+	"github.com/nxt-engineering/terraform-provider-publicip/internal/provider"
 )
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
@@ -33,7 +33,7 @@ func main() {
 	log.Printf("%s Version: %s Commit: %s Date: %s", toolName, version, commit, date)
 
 	opts := tfsdk.ServeOpts{
-		Name: "registry.terraform.io/nxt/publicip",
+		Name: "registry.terraform.io/nxt-engineering/publicip",
 	}
 
 	err := tfsdk.Serve(context.Background(), provider.New(version), opts)
