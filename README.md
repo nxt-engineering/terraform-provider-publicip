@@ -15,7 +15,7 @@ terraform {
   required_providers {
     publicip = {
       source = "nxt/publicip"
-      version = "x"
+      version = "~> 0.0.3"
     }
   }
 }

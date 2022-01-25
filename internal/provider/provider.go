@@ -161,7 +161,7 @@ func (p *provider) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics)
 				Type:                types.Int64Type,
 			},
 			"provider_url": {
-				MarkdownDescription: fmt.Sprintf("URL to a ifconfig.co-compatible IP information provider, defaults to `%s`.", DefaultProviderURL),
+				MarkdownDescription: fmt.Sprintf("URL to an ifconfig.co-compatible IP information provider, defaults to `%s`.", DefaultProviderURL),
 				Optional:            true,
 				Type:                types.StringType,
 			},

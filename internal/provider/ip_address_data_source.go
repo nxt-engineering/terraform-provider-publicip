@@ -30,7 +30,7 @@ func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagn
 				Type:                types.StringType,
 			},
 			"ip_version": {
-				MarkdownDescription: "Whether to use IPv4 or IPv6 only. Valid values: 'V4', 'V6'",
+				MarkdownDescription: fmt.Sprintf("Whether to use IPv4 or IPv6 only. Valid values: '%s', '%s'", IPVersion6, IPVersion4),
 				Optional:            true,
 				Type:                types.StringType,
 				Validators:          []tfsdk.AttributeValidator{ipVersionValidator{}},

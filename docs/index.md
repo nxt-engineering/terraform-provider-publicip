@@ -14,7 +14,12 @@ description: |-
 
 ```terraform
 provider "publicip" {
-  provider_url = "https://ifconfig.co/" # default value
+  provider_url = "https://ifconfig.co/" # optional
+  timeout      = "10s"                  # optional
+
+  # 1 request per 500ms
+  rate_limit_rate  = "500ms" # optional
+  rate_limit_burst = "1"     # optional
 }
 ```
 
@@ -23,7 +28,7 @@ provider "publicip" {
 
 ### Optional
 
-- **provider_url** (String) URL to a ifconfig.co-compatible IP information provider, defaults to `https://ifconfig.co/`.
+- **provider_url** (String) URL to an ifconfig.co-compatible IP information provider, defaults to `https://ifconfig.co/`.
 - **rate_limit_burst** (Number) Limit the number of the request to the IP information provider. Defines the number of events per rate until the limit is reached. Defaults to `1`.
 - **rate_limit_rate** (String) Limit the number of the request to the IP information provider. Defines the time until the limit is reset. Defaults to `500ms`.
 - **timeout** (String) Timeout of the request to the IP information provider. Defaults to `5s`.
