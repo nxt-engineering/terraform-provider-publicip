@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
 	"github.com/nxt-engineering/terraform-provider-publicip/internal/provider"
 )
@@ -32,11 +32,11 @@ const toolName = "terraform-provider-publicip"
 func main() {
 	log.Printf("%s Version: %s Commit: %s Date: %s", toolName, version, commit, date)
 
-	opts := tfsdk.ServeOpts{
-		Name: "registry.terraform.io/nxt-engineering/publicip",
+	opts := providerserver.ServeOpts{
+		Address: "registry.terraform.io/nxt-engineering/publicip",
 	}
 
-	err := tfsdk.Serve(context.Background(), provider.New(version), opts)
+	err := providerserver.Serve(context.Background(), provider.New(version), opts)
 
 	if err != nil {
 		log.Fatal(err.Error())
