@@ -151,7 +151,6 @@ github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMyw
 github.com/google/go-cmp v0.4.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.4.1/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
-github.com/google/go-cmp v0.5.2/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.6 h1:BKbKCqvP6I+rmFHt06ZmyQtvB8xAkWdhFyr0ZUNZcxQ=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
@@ -223,7 +222,6 @@ github.com/hashicorp/terraform-plugin-docs v0.5.1 h1:WwrUcamix9x0TqfTw/WGHMRqoTe
 github.com/hashicorp/terraform-plugin-docs v0.5.1/go.mod h1:SQwEgy0/B0UPQ07rNEG1Wpt6E3jvRcCwkVHPNybGgc0=
 github.com/hashicorp/terraform-plugin-framework v0.5.0 h1:QUBNSZHiRJrQpbjqCdPcw5MRLU1TyzpQCrA4eRId364=
 github.com/hashicorp/terraform-plugin-framework v0.5.0/go.mod h1:rV7pWcX0+tpDLQFl0XuF2SGO1fm8JkVytduSu/HbIbY=
-github.com/hashicorp/terraform-plugin-go v0.4.0/go.mod h1:7u/6nt6vaiwcWE2GuJKbJwNlDFnf5n95xKw4hqIVr58=
 github.com/hashicorp/terraform-plugin-go v0.5.0/go.mod h1:PAVN26PNGpkkmsvva1qfriae5Arky3xl3NfzKa8XFVM=
 github.com/hashicorp/terraform-plugin-go v0.6.0 h1:EmeULv7+/eMsQpb1iJpuVCcbxNmY5C0lo5cEX712Zhc=
 github.com/hashicorp/terraform-plugin-go v0.6.0/go.mod h1:p+L2cRtja1Rr5A/S9flPLAzHyt2544MhIpAfwqnK7U0=
