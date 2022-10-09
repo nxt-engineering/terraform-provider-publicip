@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"golang.org/x/time/rate"
 	"inet.af/netaddr"
 )
 
@@ -19,9 +22,22 @@ const IPVersion4 = "v4"
 const IPVersion6 = "v6"
 const IPUnknown = "unknown"
 
-type ipDataSourceType struct{}
+type IPDataSource struct {
+	timeout       time.Duration
+	ipProviderURL *url.URL
+	rateLimiter   *rate.Limiter
+	version       string
+}
 
-func (t ipDataSourceType) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
+func NewIpDataSource() datasource.DataSource {
+	return &IPDataSource{}
+}
+
+func (d IPDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_address"
+}
+
+func (d IPDataSource) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "The current (public) IP as reported by the IP information provider.",
@@ -74,15 +90,29 @@ Leave empty or ` + "`null`" + ` for default interface and IP stack.
 	}, nil
 }
 
-func (t ipDataSourceType) NewDataSource(_ context.Context, in tfsdk.Provider) (tfsdk.DataSource, diag.Diagnostics) {
-	provider, diags := convertProviderType(in)
+func (d *IPDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
 
-	return ipDataSource{
-		provider: provider,
-	}, diags
+	p, ok := req.ProviderData.(*ProviderModel)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *ProviderModel, got: %T. Please report this issue to the publicip provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	d.timeout = p.timeout
+	d.ipProviderURL = p.ipProviderURL
+	d.rateLimiter = p.rateLimiter
+	d.version = p.version
 }
 
-type ipDataSourceData struct {
+type IpDataSourceModel struct {
 	ID        types.String `tfsdk:"id"`
 	IPVersion types.String `tfsdk:"ip_version"`
 	IsIPv6    types.Bool   `tfsdk:"is_ipv6"`
@@ -93,12 +123,8 @@ type ipDataSourceData struct {
 	SourceIP  types.String `tfsdk:"source_ip"`
 }
 
-type ipDataSource struct {
-	provider provider
-}
-
-func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest, resp *tfsdk.ReadDataSourceResponse) {
-	var data ipDataSourceData
+func (d IPDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data IpDataSourceModel
 
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -112,7 +138,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 	log.Printf("got to client ✅")
 
 	client := &http.Client{
-		Timeout: d.provider.timeout,
+		Timeout: d.timeout,
 	}
 
 	if data.SourceIP.Null {
@@ -143,7 +169,7 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 
 	forceNetwork(client, network, sourceIP)
 
-	baseURL := d.provider.ipURL
+	baseURL := d.ipProviderURL
 	requestURL := url.URL{
 		Scheme:     baseURL.Scheme,
 		Opaque:     baseURL.Opaque,
@@ -165,18 +191,18 @@ func (d ipDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest,
 		return
 	}
 
-	userAgent := fmt.Sprintf("%s (%s)", d.provider.toolName, d.provider.version)
+	userAgent := fmt.Sprintf("%s (%s)", UserAgent, d.version)
 	httpReq.Header.Set("User-Agent", userAgent)
 
 	log.Printf("got to send request ✅: %s", userAgent)
 
-	if !d.provider.rateLimiter.Allow() {
+	if !d.rateLimiter.Allow() {
 		log.Printf("the rate limit may be triggered ⏳")
 	}
 
-	timeoutCtx, cancelFunc := context.WithTimeout(ctx, d.provider.timeout)
+	timeoutCtx, cancelFunc := context.WithTimeout(ctx, d.timeout)
 	defer cancelFunc()
-	err = d.provider.rateLimiter.Wait(timeoutCtx)
+	err = d.rateLimiter.Wait(timeoutCtx)
 	if err != nil {
 		log.Printf("Rate limiter error 🚨: %s", err)
 		resp.Diagnostics.AddError("Error waiting for rate limit", fmt.Sprintf("There was an error while awaiting a slot from the rate limiter: %s", err))
