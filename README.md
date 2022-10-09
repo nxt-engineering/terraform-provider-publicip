@@ -6,7 +6,7 @@ so that other providers that connect directly to the resources can operate.
 
 For example and at least until version 3,
 the `azurerm` provider needed to connect to the Azure Storage account directly to manage blob containers.
-Likewise, a `postgresql` provider needs to directly connect to the database to do it's job.
+Likewise, a `postgresql` provider needs to directly connect to the database to do its job.
 
 ## Usage
 
@@ -49,23 +49,6 @@ output "all" {
 
 ```shell
 go install
-```
-
-### Developing the Provider
-
-If you wish to work on the provider, you'll first need [Go](http://www.golang.org) installed on your machine (see [Requirements](#requirements) above).
-
-To compile the provider, run `go install`.
-This will build the provider and put the provider binary in the `$GOPATH/bin` directory.
-
-To generate or update documentation, run `go generate`.
-
-In order to run the full suite of Acceptance tests, run `make testacc`.
-
-*Note:* Acceptance tests create real resources, and often cost money to run.
-
-```shell
-make testacc
 ```
 
 ### Testrun

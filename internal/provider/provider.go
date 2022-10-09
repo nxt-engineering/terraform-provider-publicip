@@ -7,19 +7,19 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"golang.org/x/time/rate"
 )
 
-// provider satisfies the tfsdk.Provider interface and usually is included
-// with all Resource and DataSource implementations.
-type provider struct {
-	timeout     time.Duration
-	ipURL       *url.URL
-	rateLimiter *rate.Limiter
+const TypeName = "publicip"
+const UserAgent = "terraform-provider-publicip"
 
+type IpProvider struct {
 	// configured is set to true at the end of the Configure method.
 	// This can be used in Resource and DataSource implementations to verify
 	// that the provider was previously configured.
@@ -34,12 +34,17 @@ type provider struct {
 	toolName string
 }
 
-// providerData can be used to store data from the Terraform configuration.
-type providerData struct {
+// ProviderModel can be used to store data from the Terraform configuration.
+type ProviderModel struct {
 	ProviderURL    types.String `tfsdk:"provider_url"`
 	Timeout        types.String `tfsdk:"timeout"`
 	RateLimitRate  types.String `tfsdk:"rate_limit_rate"`
 	RateLimitBurst types.Int64  `tfsdk:"rate_limit_burst"`
+
+	version       string
+	ipProviderURL *url.URL
+	timeout       time.Duration
+	rateLimiter   *rate.Limiter
 }
 
 const DefaultTimeout = "5s"
@@ -47,8 +52,8 @@ const DefaultProviderURL = "https://ifconfig.co/"
 const DefaultRateLimitRate = "500ms"
 const DefaultRateLimitBurst = 1
 
-func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderRequest, resp *tfsdk.ConfigureProviderResponse) {
-	var data providerData
+func (p *IpProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var data ProviderModel
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 
@@ -56,6 +61,18 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 		return
 	}
 
+	data.version = p.version
+	if !p.configureProviderURL(&data, resp) ||
+		!p.configureTimeout(&data, resp) ||
+		!p.configureRateLimiter(&data, resp) {
+		return
+	}
+
+	resp.DataSourceData = &data
+	p.configured = true
+}
+
+func (p *IpProvider) configureProviderURL(data *ProviderModel, resp *provider.ConfigureResponse) bool {
 	var providerURL string
 	if data.ProviderURL.Null {
 		providerURL = DefaultProviderURL
@@ -63,18 +80,8 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 		providerURL = data.ProviderURL.Value
 	}
 
-	if !p.configureProviderURL(providerURL, resp) ||
-		!p.configureTimeout(data, resp) ||
-		!p.configureRateLimiter(data, resp) {
-		return
-	}
-
-	p.configured = true
-}
-
-func (p *provider) configureProviderURL(providerURL string, resp *tfsdk.ConfigureProviderResponse) bool {
 	var err error
-	p.ipURL, err = url.Parse(providerURL)
+	data.ipProviderURL, err = url.Parse(providerURL)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to parse the provider_url", fmt.Sprintf("The provider_url value '%s' can't be parsed: %s", providerURL, err))
@@ -83,7 +90,7 @@ func (p *provider) configureProviderURL(providerURL string, resp *tfsdk.Configur
 	return true
 }
 
-func (p *provider) configureTimeout(data providerData, resp *tfsdk.ConfigureProviderResponse) bool {
+func (p *IpProvider) configureTimeout(data *ProviderModel, resp *provider.ConfigureResponse) bool {
 	var timeout string
 	if data.Timeout.Null {
 		timeout = DefaultTimeout
@@ -92,7 +99,7 @@ func (p *provider) configureTimeout(data providerData, resp *tfsdk.ConfigureProv
 	}
 
 	var err error
-	p.timeout, err = time.ParseDuration(timeout)
+	data.timeout, err = time.ParseDuration(timeout)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to parse the timeout", fmt.Sprintf("The timeout value '%s' can't be parsed: %s", timeout, err))
 		return false
@@ -100,7 +107,7 @@ func (p *provider) configureTimeout(data providerData, resp *tfsdk.ConfigureProv
 	return true
 }
 
-func (p *provider) configureRateLimiter(data providerData, resp *tfsdk.ConfigureProviderResponse) bool {
+func (p *IpProvider) configureRateLimiter(data *ProviderModel, resp *provider.ConfigureResponse) bool {
 	var rateLimitRate string
 	if data.RateLimitRate.Null {
 		rateLimitRate = DefaultRateLimitRate
@@ -127,22 +134,26 @@ func (p *provider) configureRateLimiter(data providerData, resp *tfsdk.Configure
 		rateLimitBurst = int(data.RateLimitBurst.Value)
 	}
 
-	p.rateLimiter = rate.NewLimiter(rate.Every(rateLimitRateDuration), rateLimitBurst)
+	data.rateLimiter = rate.NewLimiter(rate.Every(rateLimitRateDuration), rateLimitBurst)
 
 	return true
 }
 
-func (p *provider) GetResources(_ context.Context) (map[string]tfsdk.ResourceType, diag.Diagnostics) {
-	return map[string]tfsdk.ResourceType{}, nil
+func (p *IpProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = TypeName
 }
 
-func (p *provider) GetDataSources(_ context.Context) (map[string]tfsdk.DataSourceType, diag.Diagnostics) {
-	return map[string]tfsdk.DataSourceType{
-		"publicip_address": ipDataSourceType{},
-	}, nil
+func (p *IpProvider) Resources(_ context.Context) []func() resource.Resource {
+	return nil
 }
 
-func (p *provider) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
+func (p *IpProvider) DataSources(_ context.Context) []func() datasource.DataSource {
+	return []func() datasource.DataSource{
+		NewIpDataSource,
+	}
+}
+
+func (p *IpProvider) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		Attributes: map[string]tfsdk.Attribute{
 			"timeout": {
@@ -169,39 +180,10 @@ func (p *provider) GetSchema(_ context.Context) (tfsdk.Schema, diag.Diagnostics)
 	}, nil
 }
 
-func New(version string) func() tfsdk.Provider {
-	return func() tfsdk.Provider {
-		return &provider{
+func New(version string) func() provider.Provider {
+	return func() provider.Provider {
+		return &IpProvider{
 			version: version,
 		}
 	}
-}
-
-// convertProviderType is a helper function for NewResource and NewDataSource
-// implementations to associate the concrete provider type. Alternatively,
-// this helper can be skipped and the provider type can be directly type
-// asserted (e.g. provider: in.(*provider)), however using this can prevent
-// potential panics.
-func convertProviderType(in tfsdk.Provider) (provider, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
-	p, ok := in.(*provider)
-
-	if !ok {
-		diags.AddError(
-			"Unexpected Provider Instance Type",
-			fmt.Sprintf("While creating the data source or resource, an unexpected provider type (%T) was received. This is always a bug in the provider code and should be reported to the provider developers.", p),
-		)
-		return provider{}, diags
-	}
-
-	if p == nil {
-		diags.AddError(
-			"Unexpected Provider Instance Type",
-			"While creating the data source or resource, an unexpected empty provider instance was received. This is always a bug in the provider code and should be reported to the provider developers.",
-		)
-		return provider{}, diags
-	}
-
-	return *p, diags
 }
