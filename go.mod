@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
-	github.com/hashicorp/terraform-plugin-framework v0.14.0
+	github.com/hashicorp/terraform-plugin-framework v0.15.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.24.0
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
 	inet.af/netaddr v0.0.0-20220811202034-502d2d690317
